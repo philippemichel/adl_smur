@@ -1,0 +1,131 @@
+---
+title: "COVID"
+subtitle: "Nouveaux cas"
+author: "Philippe MICHEL"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+    toc: yes
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: true
+    theme: lumen
+  html_notebook:
+    fig_caption: yes
+    theme: spacelab
+  pdf_document:
+    includes:
+      in_header: tete.tex
+    keep_tex: yes
+    latex_engine: lualatex
+    toc: yes  
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include= FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, cache = FALSE)
+# knitr::opts_chunk$set(echo = TRUE, warning = TRUE, message = TRUE)
+rm(list = ls())
+```
+
+
+```{r info}
+rm(list=ls())
+library("prettydoc")
+library("janitor")
+library("missMDA")
+library("FactoMineR")
+library("forcats")
+library("epiDisplay")
+library("factoextra")
+library("atable")
+library("knitr")
+library("finalfit")
+library("Hmisc")
+library("table1")
+library("finalfit")
+library("viridis")
+library("stringr")
+library("ggplot2")
+library("kableExtra")
+library("lubridate")
+library("dplyr")
+library("ggthemes")
+# sessionInfo()
+```
+
+
+
+
+
+```{r importx}
+rm(tt)
+tt <- read.csv("data/theseolivia.csv", as.is = FALSE, header = TRUE) %>% 
+  clean_names()
+  
+tt$date_derniere_nouvelles <- mdy(as.character(tt$date_derniere_nouvelles))
+tt$date_intervention <- mdy(as.character(tt$date_intervention))
+#
+tt <- tt %>% 
+  mutate(cut_age=age > 75)
+tt$cut_age <- as.factor(ifelse(tt$cut_age,"> 75 ans", "<76 ans"))
+#
+```
+
+# Description des données
+
+l'échantillon comporte `r dim(tt)[1]` cas pour `r dim(tt)[2]-1` variables dont deux calculées.
+
+```{r desc}
+table1(~sexe+age+ccmu+asa_initial+asa_3_mois+variation_asa+adl_initial+adl_3_mois+variation_adl+duree_hospitalisation+deces+lata+lieu_de_vie_3_mois|cut_age,data= tt)
+```
+
+## Analyse factorielle
+
+Le grand nombre de données manquantes rend cette approche hasardeuse.
+
+```{r imput}
+# nn <- estim_ncpFAMD(tt[,-c(2,14,15)])
+nn <- 2
+ttn <- imputeFAMD(tt[,-c(2,14,15)],ncp <- nn )
+ttn <- ttn$completeObs
+# ftt <- FAMD(ttn, graph = FALSE)
+```
+
+Aucun axe ou groupe ne se dessine.
+
+# Comparaisons
+
+On compare les deux groupes selon l'âge avec un seuil à 75 ans. 
+
+## Décès
+
+### Analyse simple
+
+```{r dc1}
+cc(tt$deces,tt$cut_age)
+
+```
+
+On ne met pas en évidence de différence de mortalité à 3 mois entre les deux groupes. 
+
+### Régression
+
+On corrige sur l'état initail (ASA & ADL). La régresion est réalisée après avori vérifier qu'il n'y a pas d'interaction entre l'ADL & l'ASA.
+
+```{r dc2}
+ll <- glm(deces~cut_age+adl_initial*asa_initial, data = tt,family = "binomial")
+
+ll <- glm(deces~cut_age+adl_initial+asa_initial, data = tt,family = "binomial")
+
+dep <- "deces"
+expl <- c("cut_age", "adl_initial", "asa_initial")
+tt %>% 
+finalfit(dep, expl) %>% 
+  kable()
+```
+
