@@ -36,6 +36,7 @@ rm(list = ls())
 ```{r info}
 rm(list=ls())
 library("prettydoc")
+library("thesisph")
 library("janitor")
 library("missMDA")
 library("FactoMineR")
@@ -58,74 +59,186 @@ library("ggthemes")
 # sessionInfo()
 ```
 
-
-
+```{r macros}
+violb <- function(dfx,varx,trix, titre){
+    ggplot(dplyr::filter(dfx,!is.na({{trix}})) ) +
+    aes(x = {{trix}}, y = {{varx}}, fill = {{trix}}) +
+    geom_violin() +
+    geom_boxplot(fill = "white", width = 0.2) +
+    labs(title = titre) + 
+    theme_tufte() + 
+    theme(plot.title = element_text(size=16, face="bold"), 
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+          legend.title = element_blank(),
+          legend.position = "none" 
+    )
+}
+```
 
 
 ```{r importx}
 rm(tt)
 tt <- read.csv("data/theseolivia.csv", as.is = FALSE, header = TRUE) %>% 
   clean_names()
-  
+
+names(tt)[2] <- "age_n"
 tt$date_derniere_nouvelles <- mdy(as.character(tt$date_derniere_nouvelles))
 tt$date_intervention <- mdy(as.character(tt$date_intervention))
+tt$ccmu <- as.factor(tt$ccmu)
+tt$asa_initial <- as.character(as.roman(tt$asa_initial))
+tt$asa_initial <- as.factor(tt$asa_initial)
+tt$adl_initial <- as.factor(ifelse(tt$adl_initial<6,"Dépendant","non dépendant"))
+tt$adl_3_mois <- as.factor(ifelse(tt$adl_3_mois<6,"Dépendant","non dépendant"))
+tt$asa_3_mois <- as.roman(tt$asa_3_mois)
+tt$asa_3_mois <- as.factor(tt$asa_3_mois)
+levels(tt$deces) <- c("vivant", "décédé")
 #
 tt <- tt %>% 
-  mutate(cut_age=age > 75)
-tt$cut_age <- as.factor(ifelse(tt$cut_age,"> 75 ans", "<76 ans"))
+  mutate(age=age_n > 75)
+tt$age <- as.factor(ifelse(tt$age,"> 75 ans", "<76 ans"))
 #
 ```
 
 # Description des données
 
-l'échantillon comporte `r dim(tt)[1]` cas pour `r dim(tt)[2]-1` variables dont deux calculées.
+L'échantillon comporte `r dim(tt)[1]` cas pour `r dim(tt)[2]-1` variables dont deux calculées.
 
 ```{r desc}
-table1(~sexe+age+ccmu+asa_initial+asa_3_mois+variation_asa+adl_initial+adl_3_mois+variation_adl+duree_hospitalisation+deces+lata+lieu_de_vie_3_mois|cut_age,data= tt)
+table1(~sexe+age+ccmu+asa_initial+asa_3_mois+variation_asa+adl_initial+adl_3_mois+variation_adl+duree_hospitalisation+deces+lata+lieu_de_vie_3_mois|age,data= tt)
+
+## Pyramide des âges
+```
+
+
+```{r pyr1}
+ag <- tibble(tt$age_n,tt$sexe)
+names(ag) <- c("age","sexe")
+ag <- na.omit(ag)
+ag$age <- cut(ag$age,c(0,20,30,40,50,60,70,80,90,110), c("< 20","20-29","30-39","40-49","50-59","60-69","70-79","80-89","90 et +"))
+#
+ggplot(ag) +
+aes(x=age,fill=sexe) +
+geom_bar(data = subset(ag,sexe=="F"),aes(y=..count..*(-1))) + # 
+geom_bar(data = subset(ag,sexe=="M")) +
+scale_fill_manual(values = c("pink","blue")) +
+scale_y_discrete(limits=c(-100,0,100,200),labels=c(100,0,100,200)) + 
+coord_flip() +
+  labs(title = "Pyramide des âges") + 
+     theme_tufte() + 
+     theme(plot.title = element_text(size=16, face="bold"), 
+                axis.title.x = element_blank(),
+                axis.title.y = element_blank(),
+                axis.text.x = element_blank(),
+                axis.text.y = element_text(size=12, face="bold"),
+                legend.title = element_blank(),
+                legend.position = "top" 
+               )
+```
+
+```{r pyr2}
+ag <- tibble(tt$age_n,tt$sexe)
+names(ag) <- c("age","sexe")
+ag <- na.omit(ag)
+ag$age <- cut(ag$age,c(0,75,110), c("< 76","76 et +"))
+#
+ggplot(ag) +
+aes(x=age,fill=sexe) +
+geom_bar(data = subset(ag,sexe=="F"),aes(y=..count..*(-1))) + # 
+geom_bar(data = subset(ag,sexe=="M")) +
+scale_fill_manual(values = c("pink","blue")) +
+scale_y_discrete(limits=c(-100,0,100,200),labels=c(100,0,100,200)) + 
+coord_flip() +
+  labs(title = "Pyramide des âges") + 
+     theme_tufte() + 
+     theme(plot.title = element_text(size=16, face="bold"), 
+                axis.title.x = element_blank(),
+                axis.title.y = element_blank(),
+                axis.text.x = element_blank(),
+                axis.text.y = element_text(size=12, face="bold"),
+                legend.title = element_blank(),
+                legend.position = "top" 
+               )
 ```
 
 ## Analyse factorielle
 
-Le grand nombre de données manquantes rend cette approche hasardeuse.
+Le grand nombre de données manquantes rend cette approche hasardeuse avec une imputation des données manquantes discutable. Néanmoins les deux premières dimensions, celles représentées sur les graphiques, expliquent à elles seules 47 % de la variance totale donc un bon score. Deux variables semblent bien différentier les patients ;; le décès à 3 mois & la dépendance initiale (score ADL).
 
 ```{r imput}
-# nn <- estim_ncpFAMD(tt[,-c(2,14,15)])
-nn <- 2
-ttn <- imputeFAMD(tt[,-c(2,14,15)],ncp <- nn )
+# nn <- estim_ncpMCA(tt[,-c(2,5,6,8,9,10,13,14,15)])
+nn <- 1
+ttn <- imputeMCA(tt[,-c(2,5,6,8,9,10,13,14,15)],ncp <- nn )
 ttn <- ttn$completeObs
-# ftt <- FAMD(ttn, graph = FALSE)
+ftt <- MCA(ttn, graph = FALSE)
+fviz_mca_ind(ftt, geom = "point",habillage = "adl_initial", addEllipses = TRUE)
+fviz_mca_ind(ftt, geom = "point",habillage = "deces", addEllipses = TRUE)
 ```
 
-Aucun axe ou groupe ne se dessine.
 
 # Comparaisons
 
 On compare les deux groupes selon l'âge avec un seuil à 75 ans. 
 
-## Décès
+## Décès1:4,7,11,16
 
 ### Analyse simple
 
+```{r tabcomp}
+tabcompph(tt[,c(3:4,7,11,12,16)],deces)
+```
+
+Ne pas oublier que les mesures à trois mois & donc les variations de ASA ou ADL n'ont pas de sens pour les patients décédés. 
+
+#### Âge
+
 ```{r dc1}
-cc(tt$deces,tt$cut_age)
+cc(tt$deces,tt$age, main ="Décès selon  l'âge")
 
 ```
 
-On ne met pas en évidence de différence de mortalité à 3 mois entre les deux groupes. 
+
+
+#### CCMU
+
+```{r ccmu}
+plot(tt$ccmu,tt$deces)
+```
+
+
+
+#### ASA initial
+
+```{r asa}
+plot(tt$asa_initial,tt$deces)
+```
+#### ASA initial
+
+```{r adl}
+  plot(tt$adl_initial,tt$deces)
+```
 
 ### Régression
 
-On corrige sur l'état initail (ASA & ADL). La régresion est réalisée après avori vérifier qu'il n'y a pas d'interaction entre l'ADL & l'ASA.
+On corrige sur l'état initial (ASA & CCMU). 
 
 ```{r dc2}
-ll <- glm(deces~cut_age+adl_initial*asa_initial, data = tt,family = "binomial")
-
-ll <- glm(deces~cut_age+adl_initial+asa_initial, data = tt,family = "binomial")
-
 dep <- "deces"
-expl <- c("cut_age", "adl_initial", "asa_initial")
+expl <- c("age", "ccmu", "asa_initial")
 tt %>% 
 finalfit(dep, expl) %>% 
-  kable()
+  kable(row.names= FALSE, caption = "Analyse multivariée", digits = 2)
 ```
 
+
+```{r test}
+dep <- "deces"
+expl <- "age"
+tt %>% 
+      glmuni(dep, expl) %>% 
+    fit2df(estimate_suffix ="", condense = FALSE,
+           estimate_name = "OddRatio - p ") %>% 
+  kable(row.names=FALSE)
+```
