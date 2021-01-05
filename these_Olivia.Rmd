@@ -1,6 +1,6 @@
 ---
-title: "COVID"
-subtitle: "Nouveaux cas"
+title: "CCMU Personnes âgées SMUR"
+subtitle: "Pronostic à 6 mois"
 author: "Philippe MICHEL"
 date: "`r Sys.Date()`"
 output:
@@ -31,7 +31,6 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, cache = FA
 # knitr::opts_chunk$set(echo = TRUE, warning = TRUE, message = TRUE)
 rm(list = ls())
 ```
-
 
 ```{r info}
 rm(list=ls())
@@ -80,24 +79,26 @@ violb <- function(dfx,varx,trix, titre){
 
 
 ```{r importx}
-rm(tt)
 tt <- read.csv("data/theseolivia.csv", as.is = FALSE, header = TRUE) %>% 
   clean_names()
 
 names(tt)[2] <- "age_n"
-tt$date_derniere_nouvelles <- mdy(as.character(tt$date_derniere_nouvelles))
+tt$ddn <- mdy(as.character(tt$ddn))
 tt$date_intervention <- mdy(as.character(tt$date_intervention))
 tt$ccmu <- as.factor(tt$ccmu)
+tt$asa1 <- tt$asa_initial
+tt$asa2 <- tt$asa_3_mois
 tt$asa_initial <- as.character(as.roman(tt$asa_initial))
 tt$asa_initial <- as.factor(tt$asa_initial)
+tt$asa_3_mois <- as.character(as.roman(tt$asa_3_mois))
+tt$asa_3_mois <- as.factor(tt$asa_3_mois)
 tt$adl_initial <- as.factor(ifelse(tt$adl_initial<6,"Dépendant","non dépendant"))
 tt$adl_3_mois <- as.factor(ifelse(tt$adl_3_mois<6,"Dépendant","non dépendant"))
-tt$asa_3_mois <- as.roman(tt$asa_3_mois)
-tt$asa_3_mois <- as.factor(tt$asa_3_mois)
+
 levels(tt$deces) <- c("vivant", "décédé")
 #
 tt <- tt %>% 
-  mutate(age=age_n > 75)
+  mutate(age=age_n > 74)
 tt$age <- as.factor(ifelse(tt$age,"> 75 ans", "<76 ans"))
 #
 ```
@@ -106,8 +107,10 @@ tt$age <- as.factor(ifelse(tt$age,"> 75 ans", "<76 ans"))
 
 L'échantillon comporte `r dim(tt)[1]` cas pour `r dim(tt)[2]-1` variables dont deux calculées.
 
+Les CCMU "D" ont été notés en donnée absente, les "P" en CCMU1.
+
 ```{r desc}
-table1(~sexe+age+ccmu+asa_initial+asa_3_mois+variation_asa+adl_initial+adl_3_mois+variation_adl+duree_hospitalisation+deces+lata+lieu_de_vie_3_mois|age,data= tt)
+table1(~sexe+ccmu+asa_initial+asa_3_mois+aggravation_asa+adl_initial+adl_3_mois+aggravation_adl+duree_hospitalisation+deces+limitation+lieu_de_vie_3_mois|age,data= tt)
 
 ## Pyramide des âges
 ```
@@ -142,7 +145,7 @@ coord_flip() +
 ag <- tibble(tt$age_n,tt$sexe)
 names(ag) <- c("age","sexe")
 ag <- na.omit(ag)
-ag$age <- cut(ag$age,c(0,75,110), c("< 76","76 et +"))
+ag$age <- cut(ag$age,c(0,74,110), c("< 76","76 et +"))
 #
 ggplot(ag) +
 aes(x=age,fill=sexe) +
@@ -170,11 +173,17 @@ Le grand nombre de données manquantes rend cette approche hasardeuse avec une i
 ```{r imput}
 # nn <- estim_ncpMCA(tt[,-c(2,5,6,8,9,10,13,14,15)])
 nn <- 1
-ttn <- imputeMCA(tt[,-c(2,5,6,8,9,10,13,14,15)],ncp <- nn )
+ttn <- imputeMCA(tt[, -c(2, 5, 6, 8, 9, 10, 14:17)], ncp = nn)
 ttn <- ttn$completeObs
 ftt <- MCA(ttn, graph = FALSE)
-fviz_mca_ind(ftt, geom = "point",habillage = "adl_initial", addEllipses = TRUE)
-fviz_mca_ind(ftt, geom = "point",habillage = "deces", addEllipses = TRUE)
+fviz_mca_ind(ftt,
+             geom = "point",
+             habillage = "adl_initial",
+             addEllipses = TRUE)
+fviz_mca_ind(ftt,
+             geom = "point",
+             habillage = "deces",
+             addEllipses = TRUE)
 ```
 
 
@@ -182,7 +191,6 @@ fviz_mca_ind(ftt, geom = "point",habillage = "deces", addEllipses = TRUE)
 
 On compare les deux groupes selon l'âge avec un seuil à 75 ans. 
 
-## Décès1:4,7,11,16
 
 ### Analyse simple
 
@@ -213,8 +221,9 @@ plot(tt$ccmu,tt$deces)
 
 ```{r asa}
 plot(tt$asa_initial,tt$deces)
+
 ```
-#### ASA initial
+#### ADL initial
 
 ```{r adl}
   plot(tt$adl_initial,tt$deces)
@@ -227,18 +236,16 @@ On corrige sur l'état initial (ASA & CCMU).
 ```{r dc2}
 dep <- "deces"
 expl <- c("age", "ccmu", "asa_initial")
+tt %>%
+  finalfit(dep, expl) %>%
+  kable(row.names = FALSE,
+        caption = "Analyse multivariée",
+        digits = 2)
+
 tt %>% 
-finalfit(dep, expl) %>% 
-  kable(row.names= FALSE, caption = "Analyse multivariée", digits = 2)
+  or_plot(dep,expl,plot_opts=list(theme_tufte()))
 ```
 
+# Critères secondaires
 
-```{r test}
-dep <- "deces"
-expl <- "age"
-tt %>% 
-      glmuni(dep, expl) %>% 
-    fit2df(estimate_suffix ="", condense = FALSE,
-           estimate_name = "OddRatio - p ") %>% 
-  kable(row.names=FALSE)
-```
+Tous les critères concernant l'évolution sur trois mois sont calculés uniquement sur les survivants soit  `r length(subset(tt$deces,tt$deces == "vivant"))` cas.
