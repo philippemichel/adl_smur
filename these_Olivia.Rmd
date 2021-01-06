@@ -55,6 +55,7 @@ library("kableExtra")
 library("lubridate")
 library("dplyr")
 library("ggthemes")
+library("GGally")
 # sessionInfo()
 ```
 
@@ -72,8 +73,23 @@ violb <- function(dfx,varx,trix, titre){
           axis.text.x = element_text(size=12),
           axis.text.y = element_text(size=12),
           legend.title = element_blank(),
-          legend.position = "none" 
+          legend.position = "none"
     )
+}
+
+tabcont <- function(av,ar, titre = "", lab=""){
+zz <- table(av,ar)
+tfin <- zz
+zzp <- proportions(zz,1)*100
+for (c in 1:2){
+  for (l in 1:2){
+    tfin[c,l] <- paste0(zz[c,l]," (",round(zzp[c,l],1),"%)")
+  }
+}
+kable(tfin,caption=titre,label=lab, row.names = TRUE)%>% 
+                kableExtra::kable_styling(bootstrap_options = "striped", full_width = FALSE,
+                                          position = "center")
+
 }
 ```
 
@@ -92,9 +108,10 @@ tt$asa_initial <- as.character(as.roman(tt$asa_initial))
 tt$asa_initial <- as.factor(tt$asa_initial)
 tt$asa_3_mois <- as.character(as.roman(tt$asa_3_mois))
 tt$asa_3_mois <- as.factor(tt$asa_3_mois)
-tt$adl_initial <- as.factor(ifelse(tt$adl_initial<6,"Dépendant","non dépendant"))
-tt$adl_3_mois <- as.factor(ifelse(tt$adl_3_mois<6,"Dépendant","non dépendant"))
-
+tt$adl_initial <- as.factor(ifelse(tt$adl_initial<6,"Dépendant avant","non dépendant avant"))
+tt$adl_initial <- relevel(tt$adl_initial,"non dépendant avant")
+tt$adl_3_mois <- as.factor(ifelse(tt$adl_3_mois<6,"Dépendant à 3 mois","non dépendant à 3 mois"))
+tt$adl_3_mois <- relevel(tt$adl_3_mois,"non dépendant à 3 mois")
 levels(tt$deces) <- c("vivant", "décédé")
 #
 tt <- tt %>% 
@@ -107,7 +124,7 @@ tt$age <- as.factor(ifelse(tt$age,"> 75 ans", "<76 ans"))
 
 L'échantillon comporte `r dim(tt)[1]` cas pour `r dim(tt)[2]-1` variables dont deux calculées.
 
-Les CCMU "D" ont été notés en donnée absente, les "P" en CCMU1.
+Les CCMU "D" ont été notées en donnée absente, les "P" en CCMU1.
 
 ```{r desc}
 table1(~sexe+ccmu+asa_initial+asa_3_mois+aggravation_asa+adl_initial+adl_3_mois+aggravation_adl+duree_hospitalisation+deces+limitation+lieu_de_vie_3_mois|age,data= tt)
@@ -195,7 +212,7 @@ On compare les deux groupes selon l'âge avec un seuil à 75 ans.
 ### Analyse simple
 
 ```{r tabcomp}
-tabcompph(tt[,c(3:4,7,11,12,16)],deces)
+tabcompph(tt[,c(1,18,3:4,7,10,11,12)],deces)
 ```
 
 Ne pas oublier que les mesures à trois mois & donc les variations de ASA ou ADL n'ont pas de sens pour les patients décédés. 
@@ -249,3 +266,17 @@ tt %>%
 # Critères secondaires
 
 Tous les critères concernant l'évolution sur trois mois sont calculés uniquement sur les survivants soit  `r length(subset(tt$deces,tt$deces == "vivant"))` cas.
+
+## Évolution du score ADL
+
+```{r adl0, results="asis"}
+tabcont(tt$adl_initial,tt$adl_3_mois, titre = "ADL initial et à 3 mois", lab = "adl1") 
+```
+On se concentre donc sur les patients non dépendants avant. 
+
+```{r adl1}
+ttn <- tt %>% 
+  dplyr::filter(adl_initial =="non dépendant avant")
+  cc(tt$adl_3_mois,tt$age)
+```
+Pour les patients non dépendant avant la prise en charge, le risque d'être dépendant à trois mois est lié à l'âge.
