@@ -55,6 +55,7 @@ library("kableExtra")
 library("lubridate")
 library("dplyr")
 library("ggthemes")
+library("gtsummary")
 library("GGally")
 # sessionInfo()
 ```
@@ -118,6 +119,7 @@ tt <- tt %>%
   mutate(age=age_n > 74)
 tt$age <- as.factor(ifelse(tt$age,"> 75 ans", "<76 ans"))
 #
+ttav <- tt[,c(1,18,3,4,7,11,12)]
 ```
 
 # Description des données
@@ -212,7 +214,11 @@ On compare les deux groupes selon l'âge avec un seuil à 75 ans.
 ### Analyse simple
 
 ```{r tabcomp}
-tabcompph(tt[,c(1,18,3:4,7,10,11,12)],deces)
+ttav %>% 
+tbl_summary(by = deces, missing = "no") %>% 
+  add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>% 
+  modify_header(label~" ") %>% 
+  as_kable()
 ```
 
 Ne pas oublier que les mesures à trois mois & donc les variations de ASA ou ADL n'ont pas de sens pour les patients décédés. 
